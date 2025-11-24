@@ -1,11 +1,82 @@
 import logging
 import asyncio
+import json
 import sqlite3
+import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from config import BOT_TOKEN, ADMIN_CHAT_ID  # ← ИЗМЕНЕНО: добавлен ADMIN_CHAT_ID
 from database import db
+
+def init_database():
+    """Инициализация и заполнение базы данных из JSON файла"""
+    try:
+        # Проверяем, есть ли процессы в базе
+        processes = db.get_all_processes()
+        if not processes:
+            print("📂 База процессов пуста. Заполняем из JSON...")
+            
+            # Путь к JSON-файлу
+            json_path = get_file_path('data/processes.json')
+            
+            # Проверяем существование файла
+            if not os.path.exists(json_path):
+                print(f"❌ Файл {json_path} не найден")
+                return
+
+            # Загружаем данные из JSON
+            with open(json_path, 'r', encoding='utf-8') as f:
+                processes_data = json.load(f)
+            
+            # Подключаемся к базе и заполняем
+            conn = sqlite3.connect('data/processes.db')
+            cursor = conn.cursor()
+            
+            for process in processes_data:
+                process_id = process.get('process_id', '')
+                process_name = process.get('process_name', '')
+                description = process.get('description', 'Описание отсутствует')
+                keywords = process.get('keywords', '')
+                
+                # Проверяем, что описание не пустое
+                if not description:
+                    description = 'Описание отсутствует'
+                    print(f"⚠️  Внимание: процесс {process_id} не имеет описания!")
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO processes (process_id, process_name, description, keywords)
+                    VALUES (?, ?, ?, ?)
+                ''', (process_id, process_name, description, keywords))
+            
+            conn.commit()
+            conn.close()
+            print(f"✅ База данных заполнена. Добавлено {len(processes_data)} процессов")
+            
+            # Проверим несколько записей
+            conn = sqlite3.connect('data/processes.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT process_id, process_name FROM processes LIMIT 5')
+            sample_data = cursor.fetchall()
+            conn.close()
+            
+            print("\n🔍 Проверка данных (первые 5 записей):")
+            for process in sample_data:
+                print(f"  {process[0]}: {process[1]}")
+                
+        else:
+            print(f"📊 В базе данных найдено {len(processes)} процессов")
+            
+    except Exception as e:
+        print(f"❌ Ошибка при инициализации базы: {e}")
+        import traceback
+        traceback.print_exc()
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+def get_file_path(filename):
+    """Возвращает правильный путь к файлу"""
+    return os.path.join(current_dir, filename)
 
 # Настройка логирования
 logging.basicConfig(
@@ -233,7 +304,7 @@ async def send_processes_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         # Отправляем PDF-файл
-        with open("Бизнес-процессы Ozon ООО Технологии упаковки.pdf", "rb") as pdf_file:
+        with open(get_file_path("Бизнес-процессы Ozon ООО Технологии упаковки.pdf"), "rb") as pdf_file:
             await update.message.reply_document(
                 document=pdf_file,
                 filename="Бизнес-процессы Ozon ООО Технологии упаковки.pdf",
@@ -259,7 +330,7 @@ async def send_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка руководства по чтению бизнес-процессов"""
     try:
         # Отправляем файл руководства
-        with open("РД-1.0 Руководство по чтению БП ООО Технологии упаковки.docx", "rb") as guide_file:
+        with open(get_file_path("РД-1.0 Руководство по чтению БП ООО Технологии упаковки.docx"), "rb") as guide_file:
             await update.message.reply_document(
                 document=guide_file,
                 filename="РД-1.0 Руководство по чтению бизнес-процессов.docx",
@@ -359,7 +430,7 @@ async def send_pdf_callback(query, context):
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         # Отправляем PDF-файл
-        with open("Бизнес-процессы Ozon ООО Технологии упаковки.pdf", "rb") as pdf_file:
+        with open(get_file_path("Бизнес-процессы Ozon ООО Технологии упаковки.pdf"), "rb") as pdf_file:
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=pdf_file,
@@ -387,7 +458,7 @@ async def send_guide_callback(query, context):
     try:
         chat_id = query.message.chat_id
         # Отправляем файл руководства
-        with open("РД-1.0 Руководство по чтению БП ООО Технологии упаковки.docx", "rb") as guide_file:
+        with open(get_file_path("РД-1.0 Руководство по чтению БП ООО Технологии упаковки.docx"), "rb") as guide_file:
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=guide_file,
