@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🤖 Ozon Business Processes Bot
 
 Telegram бот для поиска, изучения и работы с бизнес-процессами Ozon.
@@ -17,3 +18,7 @@ Telegram бот для поиска, изучения и работы с биз�
 ```bash
 git clone https://github.com/Alex-Ozon-Bot/ozon-business-processes-bot.git
 cd ozon-business-processes-bot
+=======
+# ozon-business-processes-bot
+Telegram бот для поиска бизнес-процессов Ozon
+>>>>>>> 831780f9baac04aede6d549cdf27d479e3205579
