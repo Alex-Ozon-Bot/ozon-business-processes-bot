@@ -9,43 +9,70 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import BOT_TOKEN, ADMIN_CHAT_ID  # ← ИЗМЕНЕНО: добавлен ADMIN_CHAT_ID
 from database import db
 
-def init_database_simple():
-    """Упрощенная инициализация базы данных"""
+def init_database():
+    """Инициализация и заполнение базы данных из JSON файла"""
     try:
-        conn = sqlite3.connect('data/processes.db')
-        cursor = conn.cursor()
-        
-        # Проверяем, есть ли данные
-        cursor.execute('SELECT COUNT(*) FROM processes')
-        count = cursor.fetchone()[0]
-        
-        if count == 0:
-            print("🔄 Заполняем базу данных из JSON...")
-            # Загружаем данные из JSON
+        # Проверяем, есть ли процессы в базе
+        processes = db.get_all_processes()
+        if not processes:
+            print("📂 База процессов пуста. Заполняем из JSON...")
+            
+            # Путь к JSON-файлу
             json_path = get_file_path('data/processes.json')
+            
+            # Проверяем существование файла
+            if not os.path.exists(json_path):
+                print(f"❌ Файл {json_path} не найден")
+                return
+
+            # Загружаем данные из JSON
             with open(json_path, 'r', encoding='utf-8') as f:
                 processes_data = json.load(f)
             
+            # Подключаемся к базе и заполняем
+            conn = sqlite3.connect('data/processes.db')
+            cursor = conn.cursor()
+            
             for process in processes_data:
+                process_id = process.get('process_id', '')
+                process_name = process.get('process_name', '')
+                description = process.get('description', 'Описание отсутствует')
+                keywords = process.get('keywords', '')
+                
+                # Проверяем, что описание не пустое
+                if not description:
+                    description = 'Описание отсутствует'
+                    print(f"⚠️  Внимание: процесс {process_id} не имеет описания!")
+                
                 cursor.execute('''
                     INSERT OR REPLACE INTO processes (process_id, process_name, description, keywords)
                     VALUES (?, ?, ?, ?)
-                ''', (
-                    process.get('process_id', ''),
-                    process.get('process_name', ''),
-                    process.get('description', 'Описание отсутствует'),
-                    process.get('keywords', '')
-                ))
+                ''', (process_id, process_name, description, keywords))
             
             conn.commit()
-            print(f"✅ Добавлено {len(processes_data)} процессов")
-        
-        conn.close()
-        return True
-        
+            conn.close()
+            print(f"✅ База данных заполнена. Добавлено {len(processes_data)} процессов")
+            
+            # Проверим несколько записей
+            conn = sqlite3.connect('data/processes.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT process_id, process_name FROM processes LIMIT 5')
+            sample_data = cursor.fetchall()
+            conn.close()
+            
+            print("\n🔍 Проверка данных (первые 5 записей):")
+            for process in sample_data:
+                print(f"  {process[0]}: {process[1]}")
+                
+        else:
+            print(f"📊 В базе данных найдено {len(processes)} процессов")
+            
     except Exception as e:
-        print(f"❌ Ошибка инициализации базы: {e}")
-        return False
+        print(f"❌ Ошибка при инициализации базы: {e}")
+        import traceback
+        traceback.print_exc()
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
 def get_file_path(filename):
     """Возвращает правильный путь к файлу"""
@@ -1106,10 +1133,11 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Запуск бота"""
     try:
-        # Инициализируем базу данных
-        if not init_database_simple():
-            print("❌ Не удалось инициализировать базу данных")
-            return
+        # Инициализация базы данных
+        init_database()  
+        
+        # Создаем Application
+        application = Application.builder().token(BOT_TOKEN).build()
         
         # Добавляем обработчики
         application.add_handler(CommandHandler("start", start))
