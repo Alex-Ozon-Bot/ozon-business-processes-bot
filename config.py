@@ -1,22 +1,13 @@
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # Получаем токен бота из переменных окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN не установлен в переменных окружения. Создайте файл .env с BOT_TOKEN=your_bot_token")
+    raise ValueError("❌ BOT_TOKEN не установлен в переменных окружения.")
 
-# Получаем ID администратора из переменных окружения
-ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
-if not ADMIN_CHAT_ID:
-    raise ValueError("❌ ADMIN_CHAT_ID не установлен в переменных окружения. Создайте файл .env с ADMIN_CHAT_ID=your_chat_id")
-
-try:
-    ADMIN_CHAT_ID = int(ADMIN_CHAT_ID)
-except ValueError:
-    raise ValueError("❌ ADMIN_CHAT_ID должен быть числовым идентификатором")
+# Жестко задаем ID администратора (ваш Telegram ID)
+ADMIN_CHAT_ID = 324493714
+print(f"👤 ADMIN_CHAT_ID установлен: {ADMIN_CHAT_ID}")
 
 DATABASE_NAME = 'data/processes.db'
 
@@ -25,3 +16,4 @@ if not os.path.exists('data'):
     os.makedirs('data')
 
 print("✅ Конфигурация загружена успешно")
+print(f"🤖 BOT_TOKEN: {'Установлен' if BOT_TOKEN else 'Отсутствует'}")
