@@ -21,30 +21,44 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
             self.wfile.write(b'OK')
+            # Логируем health check для диагностики
+            print(f"✅ Health check received from {self.client_address[0]}")
         else:
             self.send_response(404)
             self.end_headers()
     
     def log_message(self, format, *args):
-        # Логируем только ошибки, чтобы не засорять логи
+        # Отключаем стандартное логирование для health checks
         if self.path != '/health':
             logging.info(f"HTTP {self.path}: {args}")
 
 def run_health_check_server():
     """Запускает HTTP-сервер для health checks"""
-    port = int(os.getenv('PORT', 8000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    print(f"✅ Health check server started on port {port}")
-    server.serve_forever()
+    try:
+        port = int(os.getenv('PORT', 8000))
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        print(f"✅ Health check server started on port {port}")
+        print(f"🌐 Server is listening on 0.0.0.0:{port}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Health check server error: {e}")
+        import traceback
+        traceback.print_exc()
 
 def start_health_check():
     """Запускает health check сервер в отдельном потоке"""
     thread = threading.Thread(target=run_health_check_server, daemon=True)
     thread.start()
+    print(f"🔄 Health check thread started (daemon: {thread.daemon})")
 
 def keep_alive_ping():
     """Периодически отправляет запросы к своему же health endpoint"""
     port = int(os.getenv('PORT', 8000))
+    print(f"🔄 Keep-alive service configured for port {port}")
+    
+    # Даем время серверу запуститься
+    time.sleep(5)
+    
     while True:
         try:
             # Отправляем запрос к своему же health endpoint
@@ -53,11 +67,13 @@ def keep_alive_ping():
                 timeout=10
             )
             if response.status_code == 200:
-                print("✅ Keep-alive ping successful")
+                print(f"✅ Keep-alive ping successful at {datetime.now().strftime('%H:%M:%S')}")
             else:
                 print(f"⚠️ Keep-alive ping failed: {response.status_code}")
         except Exception as e:
             print(f"❌ Keep-alive ping error: {e}")
+            import traceback
+            traceback.print_exc()
         
         # Ждем 2 минуты (120 секунд) - меньше чем 5-минутный лимит Koyeb
         time.sleep(120)
@@ -66,16 +82,7 @@ def start_keep_alive():
     """Запускает keep-alive в фоновом потоке"""
     thread = threading.Thread(target=keep_alive_ping, daemon=True)
     thread.start()
-    print("🔄 Keep-alive service started")
-
-def run_health_check_server():
-    """Запускает HTTP-сервер для health checks на порту 8000"""
-    try:
-        server = HTTPServer(('0.0.0.0', 8000), HealthCheckHandler)
-        print("✅ Health check server started on port 8000")
-        server.serve_forever()
-    except Exception as e:
-        print(f"❌ Health check server error: {e}")
+    print(f"🔄 Keep-alive thread started (daemon: {thread.daemon})")
 
 def init_database():
     """Инициализация и заполнение базы данных из JSON файла"""
@@ -1207,14 +1214,25 @@ def handle_shutdown(signum, frame):
 def main():
     """Запуск бота с правильным управлением циклом событий и health check сервером"""
     try:
+        print("=" * 50)
+        print("🤖 ЗАПУСК БОТА")
+        print("=" * 50)
+        
         # Инициализация базы данных
+        print("📊 Инициализация базы данных...")
         init_database()
         
         # Запускаем health check сервер в отдельном потоке
+        print("🌐 Запуск health check сервера...")
         start_health_check()
         
         # Запускаем keep-alive сервис (пинги к своему health endpoint)
+        print("🔄 Запуск keep-alive сервиса...")
         start_keep_alive()
+        
+        # Даем время серверам запуститься
+        print("⏳ Ожидание запуска сервисов...")
+        time.sleep(3)
         
         # Остальной код без изменений...
         application = Application.builder().token(BOT_TOKEN).build()
@@ -1241,6 +1259,12 @@ def main():
         print("🌐 Health check server ready")
         print("🔄 Keep-alive service active")
         print("💬 Бот готов к работе!")
+        print("=" * 50)
+        
+        # Проверяем состояние потоков
+        print(f"📊 Активные потоки: {threading.active_count()}")
+        for thread in threading.enumerate():
+            print(f"  - {thread.name} (daemon: {thread.daemon})")
         
         application.run_polling(
             close_loop=False,
