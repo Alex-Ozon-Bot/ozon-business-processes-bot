@@ -1,6 +1,5 @@
 import requests
 import logging
-import signal
 import asyncio
 import json
 import sqlite3
@@ -12,71 +11,108 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from config import BOT_TOKEN, ADMIN_CHAT_ID
 from database import db
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import subprocess
+import sys
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'OK')
-            # Логируем health check для диагностики
-            print(f"✅ Health check received from {self.client_address[0]}")
-        else:
-            self.send_response(404)
-            self.end_headers()
-    
-    def log_message(self, format, *args):
-        # Отключаем стандартное логирование для health checks
-        if self.path != '/health':
-            logging.info(f"HTTP {self.path}: {args}")
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-def run_health_check_server():
-    """Запускает HTTP-сервер для health checks"""
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+def get_file_path(filename):
+    """Возвращает правильный путь к файлу"""
+    return os.path.join(current_dir, filename)
+
+def start_health_server():
+    """Запускает health server в отдельном процессе"""
     try:
-        port = int(os.getenv('PORT', 8000))
-        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-        print(f"✅ Health check server started on port {port}")
-        print(f"🌐 Server is listening on 0.0.0.0:{port}")
-        server.serve_forever()
+        # Запускаем health server как отдельный процесс
+        health_process = subprocess.Popen([
+            sys.executable, 
+            os.path.join(current_dir, 'health_server.py')
+        ])
+        print(f"✅ Health server started as separate process (PID: {health_process.pid})")
+        return health_process
     except Exception as e:
-        print(f"❌ Health check server error: {e}")
-        import traceback
-        traceback.print_exc()
-
-def start_health_check():
-    """Запускает health check сервер в отдельном потоке"""
-    thread = threading.Thread(target=run_health_check_server, daemon=True)
-    thread.start()
-    print(f"🔄 Health check thread started (daemon: {thread.daemon})")
+        print(f"❌ Failed to start health server: {e}")
+        return None
 
 def keep_alive_ping():
-    """Периодически отправляет запросы к своему же health endpoint"""
+    """Периодически отправляет запросы к health endpoint"""
     port = int(os.getenv('PORT', 8000))
-    print(f"🔄 Keep-alive service configured for port {port}")
+    print(f"🔄 Keep-alive service starting for port {port}")
     
     # Даем время серверу запуститься
-    time.sleep(5)
+    time.sleep(3)
     
+    ping_count = 0
     while True:
         try:
-            # Отправляем запрос к своему же health endpoint
-            response = requests.get(
-                f"http://localhost:{port}/health",
-                timeout=10
-            )
+            response = requests.get(f"http://localhost:{port}/health", timeout=5)
             if response.status_code == 200:
-                print(f"✅ Keep-alive ping successful at {datetime.now().strftime('%H:%M:%S')}")
+                ping_count += 1
+                print(f"✅ Keep-alive ping #{ping_count} successful at {datetime.now().strftime('%H:%M:%S')}")
             else:
                 print(f"⚠️ Keep-alive ping failed: {response.status_code}")
         except Exception as e:
             print(f"❌ Keep-alive ping error: {e}")
-            import traceback
-            traceback.print_exc()
         
-        # Ждем 2 минуты (120 секунд) - меньше чем 5-минутный лимит Koyeb
-        time.sleep(120)
+        # Ждем 1 минуту между пингами
+        time.sleep(60)
+
+def start_keep_alive():
+    """Запускает keep-alive в фоновом потоке"""
+    thread = threading.Thread(target=keep_alive_ping, daemon=True)
+    thread.start()
+    print("🔄 Keep-alive thread started")
+
+def init_database():
+    """Инициализация базы данных"""
+    try:
+        processes = db.get_all_processes()
+        if not processes:
+            print("📂 База процессов пуста. Заполняем из JSON...")
+            
+            json_path = get_file_path('data/processes.json')
+            if not os.path.exists(json_path):
+                print(f"❌ Файл {json_path} не найден")
+                return
+
+            with open(json_path, 'r', encoding='utf-8') as f:
+                processes_data = json.load(f)
+            
+            conn = sqlite3.connect('data/processes.db')
+            cursor = conn.cursor()
+            
+            for process in processes_data:
+                process_id = process.get('process_id', '')
+                process_name = process.get('process_name', '')
+                description = process.get('description', 'Описание отсутствует')
+                keywords = process.get('keywords', '')
+                
+                if not description:
+                    description = 'Описание отсутствует'
+                    print(f"⚠️  Внимание: процесс {process_id} не имеет описания!")
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO processes (process_id, process_name, description, keywords)
+                    VALUES (?, ?, ?, ?)
+                ''', (process_id, process_name, description, keywords))
+            
+            conn.commit()
+            conn.close()
+            print(f"✅ База данных заполнена. Добавлено {len(processes_data)} процессов")
+        else:
+            print(f"📊 В базе данных найдено {len(processes)} процессов")
+            
+    except Exception as e:
+        print(f"❌ Ошибка при инициализации базы: {e}")
+        import traceback
+        traceback.print_exc()
 
 def start_keep_alive():
     """Запускает keep-alive в фоновом потоке"""
@@ -1212,32 +1248,37 @@ def handle_shutdown(signum, frame):
     asyncio.get_event_loop().stop()
 
 def main():
-    """Запуск бота с правильным управлением циклом событий и health check сервером"""
+    """Запуск бота"""
     try:
-        print("=" * 50)
-        print("🤖 ЗАПУСК БОТА")
-        print("=" * 50)
+        print("=" * 60)
+        print("🤖 STARTING BOT WITH ENHANCED KEEP-ALIVE")
+        print("=" * 60)
         
         # Инициализация базы данных
-        print("📊 Инициализация базы данных...")
+        print("📊 Initializing database...")
         init_database()
         
-        # Запускаем health check сервер в отдельном потоке
-        print("🌐 Запуск health check сервера...")
-        start_health_check()
+        # Запускаем health server в отдельном процессе
+        print("🌐 Starting health server...")
+        health_process = start_health_server()
         
-        # Запускаем keep-alive сервис (пинги к своему health endpoint)
-        print("🔄 Запуск keep-alive сервиса...")
+        if not health_process:
+            print("❌ CRITICAL: Health server failed to start")
+            return
+        
+        # Запускаем keep-alive
+        print("🔄 Starting keep-alive service...")
         start_keep_alive()
         
-        # Даем время серверам запуститься
-        print("⏳ Ожидание запуска сервисов...")
-        time.sleep(3)
+        # Ждем запуска сервисов
+        print("⏳ Waiting for services to start...")
+        time.sleep(5)
         
-        # Остальной код без изменений...
+        # Запускаем бота
+        print("🤖 Starting Telegram bot...")
         application = Application.builder().token(BOT_TOKEN).build()
         
-        # Добавляем обработчики
+        # Добавляем обработчики (ваши существующие обработчики)
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("list", list_command))
@@ -1253,29 +1294,17 @@ def main():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         application.add_handler(CallbackQueryHandler(button_handler))
         
-        # Запускаем бота с правильной обработкой остановки
-        print("🤖 Бот запускается...")
-        print("📊 База данных подключена")
-        print("🌐 Health check server ready")
-        print("🔄 Keep-alive service active")
-        print("💬 Бот готов к работе!")
-        print("=" * 50)
+        print("✅ All services started successfully!")
+        print("💬 Bot is ready to receive messages")
+        print("=" * 60)
         
-        # Проверяем состояние потоков
-        print(f"📊 Активные потоки: {threading.active_count()}")
-        for thread in threading.enumerate():
-            print(f"  - {thread.name} (daemon: {thread.daemon})")
-        
-        application.run_polling(
-            close_loop=False,
-            stop_signals=None
-        )
+        # Запускаем бота
+        application.run_polling()
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
         import traceback
         traceback.print_exc()
-        import sys
         sys.exit(1)
 
 if __name__ == '__main__':
