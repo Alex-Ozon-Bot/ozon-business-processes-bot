@@ -1,3 +1,4 @@
+import requests
 import logging
 import signal
 import asyncio
@@ -5,6 +6,7 @@ import json
 import sqlite3
 import os
 import threading
+import time
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
@@ -26,6 +28,31 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Отключаем логирование health check запросов
         return
+
+def keep_alive_ping():
+    """Периодически отправляет запросы к боту для поддержания активности"""
+    while True:
+        try:
+            # Простой запрос к Telegram API
+            response = requests.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getMe",
+                timeout=10
+            )
+            if response.status_code == 200:
+                print("✅ Keep-alive ping successful")
+            else:
+                print(f"⚠️ Keep-alive ping failed: {response.status_code}")
+        except Exception as e:
+            print(f"❌ Keep-alive ping error: {e}")
+        
+        # Ждем 4 минуты (240 секунд) - меньше чем 5-минутный лимит Koyeb
+        time.sleep(240)
+
+def start_keep_alive():
+    """Запускает keep-alive в фоновом потоке"""
+    thread = threading.Thread(target=keep_alive_ping, daemon=True)
+    thread.start()
+    print("🔄 Keep-alive service started")
 
 def run_health_check_server():
     """Запускает HTTP-сервер для health checks на порту 8000"""
@@ -1172,9 +1199,13 @@ def main():
         # Запускаем health check сервер в отдельном потоке
         health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
         health_check_thread.start()
-        print("🚀 Health check server started in background thread")
+        print("✅ Health check server started on port 8000")
         
-        # Создаем Application
+        # Запускаем keep-alive сервис
+        start_keep_alive()
+        print("🔄 Keep-alive service started")
+        
+        # Остальной код без изменений...
         application = Application.builder().token(BOT_TOKEN).build()
         
         # Добавляем обработчики
@@ -1194,20 +1225,19 @@ def main():
         application.add_handler(CallbackQueryHandler(button_handler))
         
         # Запускаем бота с правильной обработкой остановки
-        print("🤖 Бот запускается...")
+  print("🤖 Бот запускается...")
         print("📊 База данных подключена")
         print("🌐 Health check server ready on port 8000")
+        print("🔄 Keep-alive service active")
         print("💬 Бот готов к работе!")
         
-        # Используем run_polling с правильными параметрами
         application.run_polling(
-            close_loop=False,  # Не закрывать цикл событий при остановке
-            stop_signals=None  # Не обрабатывать сигналы остановки
+            close_loop=False,
+            stop_signals=None
         )
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
-        # Принудительно завершаем процесс при критической ошибке
         import sys
         sys.exit(1)
 
