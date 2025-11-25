@@ -4,11 +4,37 @@ import asyncio
 import json
 import sqlite3
 import os
+import threading
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from config import BOT_TOKEN, ADMIN_CHAT_ID  # ← ИЗМЕНЕНО: добавлен ADMIN_CHAT_ID
 from database import db
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Отключаем логирование health check запросов
+        return
+
+def run_health_check_server():
+    """Запускает HTTP-сервер для health checks на порту 8000"""
+    try:
+        server = HTTPServer(('0.0.0.0', 8000), HealthCheckHandler)
+        print("✅ Health check server started on port 8000")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Health check server error: {e}")
 
 def init_database():
     """Инициализация и заполнение базы данных из JSON файла"""
@@ -1138,10 +1164,15 @@ def handle_shutdown(signum, frame):
     asyncio.get_event_loop().stop()
 
 def main():
-    """Запуск бота с правильным управлением циклом событий"""
+    """Запуск бота с правильным управлением циклом событий и health check сервером"""
     try:
         # Инициализация базы данных
         init_database()
+        
+        # Запускаем health check сервер в отдельном потоке
+        health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
+        health_check_thread.start()
+        print("🚀 Health check server started in background thread")
         
         # Создаем Application
         application = Application.builder().token(BOT_TOKEN).build()
@@ -1165,6 +1196,7 @@ def main():
         # Запускаем бота с правильной обработкой остановки
         print("🤖 Бот запускается...")
         print("📊 База данных подключена")
+        print("🌐 Health check server ready on port 8000")
         print("💬 Бот готов к работе!")
         
         # Используем run_polling с правильными параметрами
