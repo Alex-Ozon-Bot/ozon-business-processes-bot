@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-from config import BOT_TOKEN, ADMIN_CHAT_ID  # ← ИЗМЕНЕНО: добавлен ADMIN_CHAT_ID
+from config import BOT_TOKEN, ADMIN_CHAT_ID
 from database import db
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -26,16 +26,30 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def log_message(self, format, *args):
-        # Отключаем логирование health check запросов
-        return
+        # Логируем только ошибки, чтобы не засорять логи
+        if self.path != '/health':
+            logging.info(f"HTTP {self.path}: {args}")
+
+def run_health_check_server():
+    """Запускает HTTP-сервер для health checks"""
+    port = int(os.getenv('PORT', 8000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    print(f"✅ Health check server started on port {port}")
+    server.serve_forever()
+
+def start_health_check():
+    """Запускает health check сервер в отдельном потоке"""
+    thread = threading.Thread(target=run_health_check_server, daemon=True)
+    thread.start()
 
 def keep_alive_ping():
-    """Периодически отправляет запросы к боту для поддержания активности"""
+    """Периодически отправляет запросы к своему же health endpoint"""
+    port = int(os.getenv('PORT', 8000))
     while True:
         try:
-            # Простой запрос к Telegram API
+            # Отправляем запрос к своему же health endpoint
             response = requests.get(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/getMe",
+                f"http://localhost:{port}/health",
                 timeout=10
             )
             if response.status_code == 200:
@@ -45,8 +59,8 @@ def keep_alive_ping():
         except Exception as e:
             print(f"❌ Keep-alive ping error: {e}")
         
-        # Ждем 4 минуты (240 секунд) - меньше чем 5-минутный лимит Koyeb
-        time.sleep(240)
+        # Ждем 2 минуты (120 секунд) - меньше чем 5-минутный лимит Koyeb
+        time.sleep(120)
 
 def start_keep_alive():
     """Запускает keep-alive в фоновом потоке"""
@@ -1197,13 +1211,10 @@ def main():
         init_database()
         
         # Запускаем health check сервер в отдельном потоке
-        health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
-        health_check_thread.start()
-        print("✅ Health check server started on port 8000")
+        start_health_check()
         
-        # Запускаем keep-alive сервис
+        # Запускаем keep-alive сервис (пинги к своему health endpoint)
         start_keep_alive()
-        print("🔄 Keep-alive service started")
         
         # Остальной код без изменений...
         application = Application.builder().token(BOT_TOKEN).build()
@@ -1227,7 +1238,7 @@ def main():
         # Запускаем бота с правильной обработкой остановки
         print("🤖 Бот запускается...")
         print("📊 База данных подключена")
-        print("🌐 Health check server ready on port 8000")
+        print("🌐 Health check server ready")
         print("🔄 Keep-alive service active")
         print("💬 Бот готов к работе!")
         
@@ -1238,9 +1249,10 @@ def main():
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
+        import traceback
+        traceback.print_exc()
         import sys
         sys.exit(1)
 
 if __name__ == '__main__':
-    # Запускаем бота
     main()
