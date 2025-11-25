@@ -1225,7 +1225,7 @@ def main():
         application.add_handler(CallbackQueryHandler(button_handler))
         
         # Запускаем бота с правильной обработкой остановки
-  print("🤖 Бот запускается...")
+        print("🤖 Бот запускается...")
         print("📊 База данных подключена")
         print("🌐 Health check server ready on port 8000")
         print("🔄 Keep-alive service active")
