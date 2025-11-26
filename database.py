@@ -1,3 +1,5 @@
+[file name]: database.py
+[file content begin]
 import sqlite3
 import os
 import re
@@ -193,38 +195,22 @@ class Database:
             if stem in norm_description:
                 relevance += 8
         
-        # 6. Особые бонусы для конкретных запросов
-        if "излиш" in norm_query:
+        # 6. Особые бонусы для конкретных запросов (только те, где действительно есть слова запроса)
+        if "излиш" in norm_query and "излиш" in all_text:
             if process_id in ["B1.5.2"]:
                 relevance += 30
         
-        if "пуст" in norm_query and "упаков" in norm_query:
+        if "пуст" in norm_query and "упаков" in norm_query and "пуст" in all_text and "упаков" in all_text:
             if process_id in ["B1.6", "B1.6.2"]:
                 relevance += 30
         
-        if "недовоз" in norm_query:
+        if "недовоз" in norm_query and "недовоз" in all_text:
             if process_id in ["B1.5.1"]:
                 relevance += 30
         
-        if "дубл" in norm_query:
+        if "дубл" in norm_query and "дубл" in all_text:
             if process_id in ["B1.5.2"]:
                 relevance += 30
-        
-        # 7. Специальные бонусы для запросов с "селлер"
-        if "селлер" in norm_query:
-            if process_id in ["B6.5"]:  # Особый бонус для B6.5
-                relevance += 40
-            elif process_id in ["B6.1", "B6.2", "B6.2.1", "B6.3", "B6.4", "B6.6", "B6.6.1", "B6.7", "B6.8", "B6.2.2"]:
-                relevance += 20
-        
-        # 8. Штраф за нерелевантные категории
-        if "прием" in norm_query or "приём" in norm_query:
-            if process_id.startswith("B3"):  # Процессы выдачи заказов
-                relevance -= 15
-        
-        if "выдача" in norm_query:
-            if process_id.startswith("B1"):  # Процессы приема перевозок
-                relevance -= 15
         
         return relevance
 
@@ -258,6 +244,34 @@ class Database:
         # Ищем процессы и вычисляем релевантность
         results_with_relevance = []
         for process_data in all_processes:
+            process_id, process_name, description, keywords = process_data
+            
+            # Нормализуем все текстовые поля процесса
+            norm_process_name = self._normalize_text(process_name)
+            norm_description = self._normalize_text(description or '')
+            norm_keywords = self._normalize_text(keywords or '')
+            
+            # Объединяем все поля для поиска
+            all_text = f"{norm_process_name} {norm_description} {norm_keywords}"
+            
+            # Проверяем, что все слова запроса присутствуют в процессе
+            all_words_present = True
+            for word in words:
+                word_stems = self._get_word_stems(word)
+                word_found = False
+                for stem in word_stems:
+                    if stem in all_text:
+                        word_found = True
+                        break
+                if not word_found:
+                    all_words_present = False
+                    break
+            
+            # Если не все слова присутствуют, пропускаем процесс
+            if not all_words_present:
+                continue
+            
+            # Вычисляем релевантность только для процессов, содержащих все слова
             relevance = self._calculate_relevance(process_data, all_stems, query)
             if relevance > 5:  # Более низкий порог для большего охвата
                 results_with_relevance.append((process_data, relevance))
@@ -377,3 +391,4 @@ class Database:
 
 # Создаем глобальный экземпляр базы данных
 db = Database()
+[file content end]
