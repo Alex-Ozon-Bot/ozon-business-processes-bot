@@ -1,5 +1,3 @@
-[file name]: database.py
-[file content begin]
 import sqlite3
 import os
 import re
@@ -391,4 +389,3 @@ class Database:
 
 # Создаем глобальный экземпляр базы данных
 db = Database()
-[file content end]
