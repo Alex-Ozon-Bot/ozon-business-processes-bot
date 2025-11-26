@@ -118,7 +118,11 @@ class Database:
             'дубли': ['дубл'],
             'оформление': ['оформлен', 'оформ'],
             'приёмка': ['приемк', 'приёмк'],
-            'выдача': ['выдач'],
+            'выдача': ['выдач', 'выда'],
+            'выдать': ['выдач', 'выда'],
+            'выдают': ['выдач', 'выда'],
+            'выдаче': ['выдач', 'выда'],
+            'выдач': ['выдач', 'выда'],
             'возврат': ['возврат'],
             'возвраты': ['возврат'],
             'отправка': ['отправк'],
@@ -148,7 +152,7 @@ class Database:
         
         return stems
 
-    def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str) -> int:
+    def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str, found_words_count: int) -> int:
         """Вычисляет релевантность процесса для запроса с улучшенной логикой"""
         process_id, process_name, description, keywords = process_data
         
@@ -162,38 +166,37 @@ class Database:
         
         relevance = 0
         
-        # 1. Проверяем наличие всех стемм запроса
+        # 1. Бонус за количество найденных слов (самый важный критерий)
+        relevance += found_words_count * 30
+        
+        # 2. Проверяем наличие всех стемм запроса
         found_stems = 0
         for stem in query_stems:
             if stem in all_text:
                 found_stems += 1
                 relevance += 5  # Бонус за каждое найденное слово
         
-        # Бонус за нахождение всех слов запроса
-        if found_stems == len(query_stems):
-            relevance += 20
-        
-        # 2. Бонус за точное совпадение фразы
+        # 3. Бонус за точное совпадение фразы
         norm_query = self._normalize_text(original_query)
         if norm_query in all_text:
             relevance += 50
         
-        # 3. Бонус за совпадение в названии процесса
+        # 4. Бонус за совпадение в названии процесса
         for stem in query_stems:
             if stem in norm_process_name:
-                relevance += 15
+                relevance += 20
         
-        # 4. Бонус за совпадение в ключевых словах
+        # 5. Бонус за совпадение в ключевых словах
         for stem in query_stems:
             if stem in norm_keywords:
-                relevance += 10
+                relevance += 15
         
-        # 5. Бонус за совпадение в описании
+        # 6. Бонус за совпадение в описании
         for stem in query_stems:
             if stem in norm_description:
-                relevance += 8
+                relevance += 10
         
-        # 6. Особые бонусы для конкретных запросов (только те, где действительно есть слова запроса)
+        # 7. Особые бонусы для конкретных запросов (только те, где действительно есть слова запроса)
         if "излиш" in norm_query and "излиш" in all_text:
             if process_id in ["B1.5.2"]:
                 relevance += 30
@@ -252,8 +255,8 @@ class Database:
             # Объединяем все поля для поиска
             all_text = f"{norm_process_name} {norm_description} {norm_keywords}"
             
-            # Проверяем, что все слова запроса присутствуют в процессе
-            all_words_present = True
+            # Считаем количество найденных слов (более гибкий подход)
+            found_words_count = 0
             for word in words:
                 word_stems = self._get_word_stems(word)
                 word_found = False
@@ -261,19 +264,20 @@ class Database:
                     if stem in all_text:
                         word_found = True
                         break
-                if not word_found:
-                    all_words_present = False
-                    break
+                if word_found:
+                    found_words_count += 1
             
-            # Если не все слова присутствуют, пропускаем процесс
-            if not all_words_present:
+            # Если не найдено ни одного слова, пропускаем процесс
+            if found_words_count == 0:
                 continue
             
-            # Вычисляем релевантность только для процессов, содержащих все слова
-            relevance = self._calculate_relevance(process_data, all_stems, query)
-            if relevance > 5:  # Более низкий порог для большего охвата
+            # Вычисляем релевантность с учетом количества найденных слов
+            relevance = self._calculate_relevance(process_data, all_stems, query, found_words_count)
+            
+            # Более низкий порог для включения в результаты
+            if relevance > 10:
                 results_with_relevance.append((process_data, relevance))
-                print(f"   ✅ {process_data[1]} (ID: {process_data[0]}) - релевантность: {relevance}")
+                print(f"   ✅ {process_data[1]} (ID: {process_data[0]}) - найдено слов: {found_words_count}/{len(words)}, релевантность: {relevance}")
         
         # Сортируем по релевантности (по убыванию)
         results_with_relevance.sort(key=lambda x: x[1], reverse=True)
@@ -282,7 +286,7 @@ class Database:
         top_results = results_with_relevance[:5]
         
         # Более мягкий фильтр релевантности
-        final_results = [process for process, relevance in top_results if relevance > 8]
+        final_results = [process for process, relevance in top_results if relevance > 15]
         
         print(f"📊 Итоговые результаты: {len(final_results)} процессов")
         
