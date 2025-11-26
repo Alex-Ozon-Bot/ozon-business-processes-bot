@@ -148,85 +148,85 @@ class Database:
         
         return stems
 
-def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str) -> int:
-    """Вычисляет релевантность процесса для запроса с улучшенной логикой"""
-    process_id, process_name, description, keywords = process_data
-    
-    # Нормализуем все текстовые поля процесса
-    norm_process_name = self._normalize_text(process_name)
-    norm_description = self._normalize_text(description or '')
-    norm_keywords = self._normalize_text(keywords or '')
-    
-    # Объединяем все поля для поиска
-    all_text = f"{norm_process_name} {norm_description} {norm_keywords}"
-    
-    relevance = 0
-    
-    # 1. Проверяем наличие всех стемм запроса
-    found_stems = 0
-    for stem in query_stems:
-        if stem in all_text:
-            found_stems += 1
-            relevance += 5  # Бонус за каждое найденное слово
-    
-    # Бонус за нахождение всех слов запроса
-    if found_stems == len(query_stems):
-        relevance += 20
-    
-    # 2. Бонус за точное совпадение фразы
-    norm_query = self._normalize_text(original_query)
-    if norm_query in all_text:
-        relevance += 50
-    
-    # 3. Бонус за совпадение в названии процесса
-    for stem in query_stems:
-        if stem in norm_process_name:
-            relevance += 15
-    
-    # 4. Бонус за совпадение в ключевых словах
-    for stem in query_stems:
-        if stem in norm_keywords:
-            relevance += 10
-    
-    # 5. Бонус за совпадение в описании
-    for stem in query_stems:
-        if stem in norm_description:
-            relevance += 8
-    
-    # 6. Особые бонусы для конкретных запросов
-    if "излиш" in norm_query:
-        if process_id in ["B1.5.2"]:
-            relevance += 30
-    
-    if "пуст" in norm_query and "упаков" in norm_query:
-        if process_id in ["B1.6", "B1.6.2"]:
-            relevance += 30
-    
-    if "недовоз" in norm_query:
-        if process_id in ["B1.5.1"]:
-            relevance += 30
-    
-    if "дубл" in norm_query:
-        if process_id in ["B1.5.2"]:
-            relevance += 30
-    
-    # 7. Специальные бонусы для запросов с "селлер"
-    if "селлер" in norm_query:
-        if process_id in ["B6.5"]:  # Особый бонус для B6.5
-            relevance += 40
-        elif process_id in ["B6.1", "B6.2", "B6.2.1", "B6.3", "B6.4", "B6.6", "B6.6.1", "B6.7", "B6.8", "B6.2.2"]:
+    def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str) -> int:
+        """Вычисляет релевантность процесса для запроса с улучшенной логикой"""
+        process_id, process_name, description, keywords = process_data
+        
+        # Нормализуем все текстовые поля процесса
+        norm_process_name = self._normalize_text(process_name)
+        norm_description = self._normalize_text(description or '')
+        norm_keywords = self._normalize_text(keywords or '')
+        
+        # Объединяем все поля для поиска
+        all_text = f"{norm_process_name} {norm_description} {norm_keywords}"
+        
+        relevance = 0
+        
+        # 1. Проверяем наличие всех стемм запроса
+        found_stems = 0
+        for stem in query_stems:
+            if stem in all_text:
+                found_stems += 1
+                relevance += 5  # Бонус за каждое найденное слово
+        
+        # Бонус за нахождение всех слов запроса
+        if found_stems == len(query_stems):
             relevance += 20
-    
-    # 8. Штраф за нерелевантные категории
-    if "прием" in norm_query or "приём" in norm_query:
-        if process_id.startswith("B3"):  # Процессы выдачи заказов
-            relevance -= 15
-    
-    if "выдача" in norm_query:
-        if process_id.startswith("B1"):  # Процессы приема перевозок
-            relevance -= 15
-    
-    return relevance
+        
+        # 2. Бонус за точное совпадение фразы
+        norm_query = self._normalize_text(original_query)
+        if norm_query in all_text:
+            relevance += 50
+        
+        # 3. Бонус за совпадение в названии процесса
+        for stem in query_stems:
+            if stem in norm_process_name:
+                relevance += 15
+        
+        # 4. Бонус за совпадение в ключевых словах
+        for stem in query_stems:
+            if stem in norm_keywords:
+                relevance += 10
+        
+        # 5. Бонус за совпадение в описании
+        for stem in query_stems:
+            if stem in norm_description:
+                relevance += 8
+        
+        # 6. Особые бонусы для конкретных запросов
+        if "излиш" in norm_query:
+            if process_id in ["B1.5.2"]:
+                relevance += 30
+        
+        if "пуст" in norm_query and "упаков" in norm_query:
+            if process_id in ["B1.6", "B1.6.2"]:
+                relevance += 30
+        
+        if "недовоз" in norm_query:
+            if process_id in ["B1.5.1"]:
+                relevance += 30
+        
+        if "дубл" in norm_query:
+            if process_id in ["B1.5.2"]:
+                relevance += 30
+        
+        # 7. Специальные бонусы для запросов с "селлер"
+        if "селлер" in norm_query:
+            if process_id in ["B6.5"]:  # Особый бонус для B6.5
+                relevance += 40
+            elif process_id in ["B6.1", "B6.2", "B6.2.1", "B6.3", "B6.4", "B6.6", "B6.6.1", "B6.7", "B6.8", "B6.2.2"]:
+                relevance += 20
+        
+        # 8. Штраф за нерелевантные категории
+        if "прием" in norm_query or "приём" in norm_query:
+            if process_id.startswith("B3"):  # Процессы выдачи заказов
+                relevance -= 15
+        
+        if "выдача" in norm_query:
+            if process_id.startswith("B1"):  # Процессы приема перевозок
+                relevance -= 15
+        
+        return relevance
 
     def search_processes(self, query: str) -> List[Tuple]:
         """Улучшенный поиск процессов с расширенной морфологией"""
@@ -266,7 +266,7 @@ def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], orig
         # Сортируем по релевантности (по убыванию)
         results_with_relevance.sort(key=lambda x: x[1], reverse=True)
         
-        # Берем топ-5 результатов 
+        # Берем топ-5 результатов (ограничиваем до 5)
         top_results = results_with_relevance[:5]
         
         # Более мягкий фильтр релевантности

@@ -846,13 +846,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_simple_results(update: Update, query: str, results):
     """Показывает простой пронумерованный список найденных процессов"""
     try:
+        # Ограничиваем количество результатов до 5
+        limited_results = results[:5]
+        
         text = f"🔍 <b>РЕЗУЛЬТАТЫ ПОИСКА</b>\n"
         text += f"Запрос: '<code>{query}</code>'\n"
         text += f"Найдено процессов: <b>{len(results)}</b>\n"
-        text += f"Показано: <b>{min(5, len(results))}</b> (самые релевантные)\n\n"
+        text += f"Показано: <b>{len(limited_results)}</b> (самые релевантные)\n\n"
         
-        # Простой пронумерованный список процессов
-        for i, result in enumerate(results, 1):
+        # Простой пронумерованный список процессов (только первые 5)
+        for i, result in enumerate(limited_results, 1):
             # Формат результата: (process_id, process_name, description, keywords)
             if isinstance(result, (list, tuple)) and len(result) >= 2:
                 process_id = result[0]  # Первый элемент - process_id
@@ -865,9 +868,9 @@ async def show_simple_results(update: Update, query: str, results):
         
         text += f"\n💡 <b>Для просмотра краткого описания подходящего процесса нажмите на кнопку ниже ↓</b>\n"
                 
-        # Добавляем кнопки для быстрого доступа к первым процессам
+        # Добавляем кнопки для быстрого доступа к первым процессам (только первые 5)
         keyboard = []
-        for i, result in enumerate(results[:5], 1):
+        for i, result in enumerate(limited_results, 1):
             if isinstance(result, (list, tuple)) and len(result) >= 1:
                 process_id = result[0]
                 # Используем только process_id для callback_data
@@ -887,7 +890,7 @@ async def show_simple_results(update: Update, query: str, results):
         logger.error(f"Ошибка в show_simple_results: {e}")
         # Упрощенный fallback
         simple_text = f"🔍 Найдено процессов: {len(results)}\n\n"
-        for i, result in enumerate(results[:10], 1):
+        for i, result in enumerate(results[:5], 1):  # Также ограничиваем до 5 в fallback
             if isinstance(result, (list, tuple)) and len(result) >= 2:
                 simple_text += f"{i}. {result[0]} - {result[1]}\n"
             else:
