@@ -123,6 +123,10 @@ class Database:
             'выдают': ['выдач', 'выда'],
             'выдаче': ['выдач', 'выда'],
             'выдач': ['выдач', 'выда'],
+            'экземпляр': ['экземпляр'],
+            'экземпляров': ['экземпляр'],
+            'экземпляры': ['экземпляр'],
+            'экземпляра': ['экземпляр'],
             'возврат': ['возврат'],
             'возвраты': ['возврат'],
             'отправка': ['отправк'],
@@ -152,7 +156,7 @@ class Database:
         
         return stems
 
-    def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str, found_words_count: int) -> int:
+    def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str, found_words_count: int, total_words: int) -> int:
         """Вычисляет релевантность процесса для запроса с улучшенной логикой"""
         process_id, process_name, description, keywords = process_data
         
@@ -166,15 +170,26 @@ class Database:
         
         relevance = 0
         
-        # 1. Бонус за количество найденных слов (самый важный критерий)
-        relevance += found_words_count * 30
+        # 1. Самый важный критерий - количество найденных слов (максимальный бонус)
+        if found_words_count == total_words:
+            # Все слова найдены - максимальный бонус
+            relevance += 100
+        elif found_words_count == total_words - 1:
+            # Найдены все слова кроме одного - высокий бонус
+            relevance += 70
+        elif found_words_count >= total_words - 2:
+            # Найдено большинство слов - средний бонус
+            relevance += 40
+        else:
+            # Найдено мало слов - минимальный бонус
+            relevance += found_words_count * 10
         
         # 2. Проверяем наличие всех стемм запроса
         found_stems = 0
         for stem in query_stems:
             if stem in all_text:
                 found_stems += 1
-                relevance += 5  # Бонус за каждое найденное слово
+                relevance += 3  # Небольшой бонус за каждое найденное слово
         
         # 3. Бонус за точное совпадение фразы
         norm_query = self._normalize_text(original_query)
@@ -184,17 +199,17 @@ class Database:
         # 4. Бонус за совпадение в названии процесса
         for stem in query_stems:
             if stem in norm_process_name:
-                relevance += 20
+                relevance += 15
         
         # 5. Бонус за совпадение в ключевых словах
         for stem in query_stems:
             if stem in norm_keywords:
-                relevance += 15
+                relevance += 10
         
         # 6. Бонус за совпадение в описании
         for stem in query_stems:
             if stem in norm_description:
-                relevance += 10
+                relevance += 8
         
         # 7. Особые бонусы для конкретных запросов (только те, где действительно есть слова запроса)
         if "излиш" in norm_query and "излиш" in all_text:
@@ -240,7 +255,7 @@ class Database:
         all_stems = list(set(all_stems))
         
         # Отладочная информация
-        print(f"🔍 Поиск: '{query}' -> стеммы: {all_stems}")
+        print(f"🔍 Поиск: '{query}' -> слова: {words}, стеммы: {all_stems}")
         
         # Ищем процессы и вычисляем релевантность
         results_with_relevance = []
@@ -255,7 +270,7 @@ class Database:
             # Объединяем все поля для поиска
             all_text = f"{norm_process_name} {norm_description} {norm_keywords}"
             
-            # Считаем количество найденных слов (более гибкий подход)
+            # Считаем количество найденных слов
             found_words_count = 0
             for word in words:
                 word_stems = self._get_word_stems(word)
@@ -272,23 +287,30 @@ class Database:
                 continue
             
             # Вычисляем релевантность с учетом количества найденных слов
-            relevance = self._calculate_relevance(process_data, all_stems, query, found_words_count)
+            relevance = self._calculate_relevance(process_data, all_stems, query, found_words_count, len(words))
             
-            # Более низкий порог для включения в результаты
-            if relevance > 10:
-                results_with_relevance.append((process_data, relevance))
-                print(f"   ✅ {process_data[1]} (ID: {process_data[0]}) - найдено слов: {found_words_count}/{len(words)}, релевантность: {relevance}")
+            results_with_relevance.append((process_data, relevance, found_words_count))
+            print(f"   ✅ {process_data[1]} (ID: {process_data[0]}) - найдено слов: {found_words_count}/{len(words)}, релевантность: {relevance}")
         
-        # Сортируем по релевантности (по убыванию)
-        results_with_relevance.sort(key=lambda x: x[1], reverse=True)
-        
-        # Берем топ-5 результатов (ограничиваем до 5)
-        top_results = results_with_relevance[:5]
-        
-        # Более мягкий фильтр релевантности
-        final_results = [process for process, relevance in top_results if relevance > 15]
-        
-        print(f"📊 Итоговые результаты: {len(final_results)} процессов")
+        # Если есть результаты, находим максимальное количество найденных слов
+        if results_with_relevance:
+            max_found_words = max(found_words for _, _, found_words in results_with_relevance)
+            print(f"📊 Максимальное количество найденных слов: {max_found_words}/{len(words)}")
+            
+            # Оставляем только процессы с максимальным количеством найденных слов
+            filtered_results = [(process, relevance) for process, relevance, found_words in results_with_relevance 
+                              if found_words == max_found_words]
+            
+            # Сортируем по релевантности (по убыванию)
+            filtered_results.sort(key=lambda x: x[1], reverse=True)
+            
+            # Берем топ-5 результатов
+            final_results = [process for process, relevance in filtered_results[:5]]
+            
+            print(f"📊 Итоговые результаты: {len(final_results)} процессов (с {max_found_words}/{len(words)} словами)")
+        else:
+            final_results = []
+            print(f"📊 Итоговые результаты: 0 процессов")
         
         conn.close()
         return final_results
