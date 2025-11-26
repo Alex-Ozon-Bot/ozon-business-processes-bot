@@ -848,7 +848,8 @@ async def show_simple_results(update: Update, query: str, results):
     try:
         text = f"🔍 <b>РЕЗУЛЬТАТЫ ПОИСКА</b>\n"
         text += f"Запрос: '<code>{query}</code>'\n"
-        text += f"Найдено процессов: <b>{len(results)}</b>\n\n"
+        text += f"Найдено процессов: <b>{len(results)}</b>\n"
+	text += f"Показано: <b>{min(5, len(results))}</b> (самые релевантные)\n\n"
         
         # Простой пронумерованный список процессов
         for i, result in enumerate(results, 1):
@@ -1078,8 +1079,7 @@ async def cancel_suggestion_callback(query, context):
         context.user_data['waiting_for_suggestion'] = False
         
         keyboard = [
-            [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")],
-            [InlineKeyboardButton("💡 Предложить позже", callback_data="send_suggestion")]
+            [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
