@@ -1248,7 +1248,6 @@ def handle_shutdown(signum, frame):
     asyncio.get_event_loop().stop()
 
 def main():
-    """Запуск бота"""
     try:
         print("=" * 60)
         print("🤖 STARTING BOT WITH ENHANCED KEEP-ALIVE")
@@ -1258,27 +1257,43 @@ def main():
         print("📊 Initializing database...")
         init_database()
         
-        # Запускаем health server в отдельном процессе
-        print("🌐 Starting health server...")
-        health_process = start_health_server()
+        # Запускаем улучшенный health server в отдельном потоке
+        print("🌐 Starting enhanced health server...")
+        health_thread = threading.Thread(
+            target=lambda: subprocess.run([
+                sys.executable, 
+                os.path.join(current_dir, 'health_server.py')
+            ]), 
+            daemon=True
+        )
+        health_thread.start()
         
-        if not health_process:
-            print("❌ CRITICAL: Health server failed to start")
-            return
+        # Запускаем агрессивный keep-alive
+        print("🔄 Starting aggressive keep-alive...")
+        from keep_alive import start_aggressive_keep_alive, start_sleep_prevention
+        start_aggressive_keep_alive()
+        start_sleep_prevention()
         
-        # Запускаем keep-alive
-        print("🔄 Starting keep-alive service...")
-        start_keep_alive()
-        
-        # Ждем запуска сервисов
+        # Даем время сервисам запуститься
         print("⏳ Waiting for services to start...")
-        time.sleep(5)
+        time.sleep(10)
+        
+        # Проверяем, что health server работает
+        try:
+            port = int(os.getenv('PORT', 8000))
+            response = requests.get(f"http://localhost:{port}/health", timeout=10)
+            if response.status_code == 200:
+                print("✅ Health server confirmed working")
+            else:
+                print(f"⚠️ Health server response: {response.status_code}")
+        except Exception as e:
+            print(f"❌ Health server check failed: {e}")
         
         # Запускаем бота
         print("🤖 Starting Telegram bot...")
         application = Application.builder().token(BOT_TOKEN).build()
         
-        # Добавляем обработчики (ваши существующие обработчики)
+        # Добавляем обработчики
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("list", list_command))
@@ -1298,14 +1313,38 @@ def main():
         print("💬 Bot is ready to receive messages")
         print("=" * 60)
         
-        # Запускаем бота
-        application.run_polling()
+        # Бесконечный цикл для поддержания активности
+        while True:
+            try:
+                # Запускаем бота
+                application.run_polling(
+                    close_loop=False,
+                    stop_signals=None,  # Игнорируем сигналы остановки
+                    allowed_updates=None
+                )
+            except Exception as e:
+                print(f"🔴 Bot crashed: {e}")
+                print("🔄 Restarting bot in 10 seconds...")
+                time.sleep(10)
+                # Пересоздаем application при перезапуске
+                application = Application.builder().token(BOT_TOKEN).build()
+                # Перезагружаем обработчики
+                application.add_handler(CommandHandler("start", start))
+                application.add_handler(CommandHandler("help", help_command))
+                application.add_handler(CommandHandler("list", list_command))
+                application.add_handler(CommandHandler("pdf", send_processes_pdf))
+                application.add_handler(CommandHandler("guide", send_guide))
+                application.add_handler(CommandHandler("video", send_bpmn_video))
+                application.add_handler(CommandHandler("test", send_test))
+                application.add_handler(CommandHandler("suggestion", suggestion_command))
+                application.add_handler(CommandHandler("viewsuggestions", view_suggestions_command))
+                application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+                application.add_handler(CallbackQueryHandler(button_handler))
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
-
-if __name__ == '__main__':
-    main()
+        print("🔄 Attempting auto-restart in 30 seconds...")
+        time.sleep(30)
+        main()  # Рекурсивный перезапуск
