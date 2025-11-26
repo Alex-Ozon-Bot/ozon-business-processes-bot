@@ -27,49 +27,6 @@ def get_file_path(filename):
     """Возвращает правильный путь к файлу"""
     return os.path.join(current_dir, filename)
 
-def start_health_server():
-    """Запускает health server в отдельном процессе"""
-    try:
-        # Запускаем health server как отдельный процесс
-        health_process = subprocess.Popen([
-            sys.executable, 
-            os.path.join(current_dir, 'health_server.py')
-        ])
-        print(f"✅ Health server started as separate process (PID: {health_process.pid})")
-        return health_process
-    except Exception as e:
-        print(f"❌ Failed to start health server: {e}")
-        return None
-
-def keep_alive_ping():
-    """Периодически отправляет запросы к health endpoint"""
-    port = int(os.getenv('PORT', 8000))
-    print(f"🔄 Keep-alive service starting for port {port}")
-    
-    # Даем время серверу запуститься
-    time.sleep(3)
-    
-    ping_count = 0
-    while True:
-        try:
-            response = requests.get(f"http://localhost:{port}/health", timeout=5)
-            if response.status_code == 200:
-                ping_count += 1
-                print(f"✅ Keep-alive ping #{ping_count} successful at {datetime.now().strftime('%H:%M:%S')}")
-            else:
-                print(f"⚠️ Keep-alive ping failed: {response.status_code}")
-        except Exception as e:
-            print(f"❌ Keep-alive ping error: {e}")
-        
-        # Ждем 1 минуту между пингами
-        time.sleep(60)
-
-def start_keep_alive():
-    """Запускает keep-alive в фоновом потоке"""
-    thread = threading.Thread(target=keep_alive_ping, daemon=True)
-    thread.start()
-    print("🔄 Keep-alive thread started")
-
 def init_database():
     """Инициализация базы данных"""
     try:
@@ -114,87 +71,48 @@ def init_database():
         import traceback
         traceback.print_exc()
 
+def keep_alive_ping():
+    """Периодически отправляет запросы к health endpoint"""
+    port = int(os.getenv('PORT', 8000))
+    print(f"🔄 Keep-alive service starting for port {port}")
+    
+    # Даем время серверу запуститься
+    time.sleep(10)
+    
+    ping_count = 0
+    while True:
+        try:
+            response = requests.get(f"http://localhost:{port}/health", timeout=10)
+            if response.status_code == 200:
+                ping_count += 1
+                current_time = datetime.now().strftime('%H:%M:%S')
+                print(f"✅ Keep-alive ping #{ping_count} successful at {current_time}")
+            else:
+                print(f"⚠️ Keep-alive ping failed: {response.status_code}")
+        except Exception as e:
+            print(f"❌ Keep-alive ping error: {e}")
+        
+        # Ждем 2 минуты между пингами (увеличили интервал)
+        time.sleep(120)
+
 def start_keep_alive():
     """Запускает keep-alive в фоновом потоке"""
     thread = threading.Thread(target=keep_alive_ping, daemon=True)
     thread.start()
-    print(f"🔄 Keep-alive thread started (daemon: {thread.daemon})")
+    print("🔄 Keep-alive thread started")
 
-def init_database():
-    """Инициализация и заполнение базы данных из JSON файла"""
+def start_health_server():
+    """Запускает health server в отдельном ПРОЦЕССЕ (не потоке)"""
     try:
-        # Проверяем, есть ли процессы в базе
-        processes = db.get_all_processes()
-        if not processes:
-            print("📂 База процессов пуста. Заполняем из JSON...")
-            
-            # Путь к JSON-файлу
-            json_path = get_file_path('data/processes.json')
-            
-            # Проверяем существование файла
-            if not os.path.exists(json_path):
-                print(f"❌ Файл {json_path} не найден")
-                return
-
-            # Загружаем данные из JSON
-            with open(json_path, 'r', encoding='utf-8') as f:
-                processes_data = json.load(f)
-            
-            # Подключаемся к базе и заполняем
-            conn = sqlite3.connect('data/processes.db')
-            cursor = conn.cursor()
-            
-            for process in processes_data:
-                process_id = process.get('process_id', '')
-                process_name = process.get('process_name', '')
-                description = process.get('description', 'Описание отсутствует')
-                keywords = process.get('keywords', '')
-                
-                # Проверяем, что описание не пустое
-                if not description:
-                    description = 'Описание отсутствует'
-                    print(f"⚠️  Внимание: процесс {process_id} не имеет описания!")
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO processes (process_id, process_name, description, keywords)
-                    VALUES (?, ?, ?, ?)
-                ''', (process_id, process_name, description, keywords))
-            
-            conn.commit()
-            conn.close()
-            print(f"✅ База данных заполнена. Добавлено {len(processes_data)} процессов")
-            
-            # Проверим несколько записей
-            conn = sqlite3.connect('data/processes.db')
-            cursor = conn.cursor()
-            cursor.execute('SELECT process_id, process_name FROM processes LIMIT 5')
-            sample_data = cursor.fetchall()
-            conn.close()
-            
-            print("\n🔍 Проверка данных (первые 5 записей):")
-            for process in sample_data:
-                print(f"  {process[0]}: {process[1]}")
-                
-        else:
-            print(f"📊 В базе данных найдено {len(processes)} процессов")
-            
+        health_process = subprocess.Popen([
+            sys.executable, 
+            os.path.join(current_dir, 'health_server.py')
+        ])
+        print(f"✅ Health server started as separate process (PID: {health_process.pid})")
+        return health_process
     except Exception as e:
-        print(f"❌ Ошибка при инициализации базы: {e}")
-        import traceback
-        traceback.print_exc()
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-def get_file_path(filename):
-    """Возвращает правильный путь к файлу"""
-    return os.path.join(current_dir, filename)
-
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+        print(f"❌ Failed to start health server: {e}")
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -1248,35 +1166,31 @@ def handle_shutdown(signum, frame):
     asyncio.get_event_loop().stop()
 
 def main():
+    """Основная функция запуска бота"""
     try:
         print("=" * 60)
-        print("🤖 STARTING BOT WITH ENHANCED KEEP-ALIVE")
+        print("🤖 STARTING BOT WITH IMPROVED ARCHITECTURE")
         print("=" * 60)
         
         # Инициализация базы данных
         print("📊 Initializing database...")
         init_database()
         
-        # Запускаем улучшенный health server в отдельном потоке
-        print("🌐 Starting enhanced health server...")
-        health_thread = threading.Thread(
-            target=lambda: subprocess.run([
-                sys.executable, 
-                os.path.join(current_dir, 'health_server.py')
-            ]), 
-            daemon=True
-        )
-        health_thread.start()
+        # Запускаем health server в отдельном процессе
+        print("🌐 Starting health server...")
+        health_process = start_health_server()
         
-        # Запускаем агрессивный keep-alive
-        print("🔄 Starting aggressive keep-alive...")
-        from keep_alive import start_aggressive_keep_alive, start_sleep_prevention
-        start_aggressive_keep_alive()
-        start_sleep_prevention()
+        if not health_process:
+            print("❌ CRITICAL: Health server failed to start")
+            return
+        
+        # Запускаем keep-alive
+        print("🔄 Starting keep-alive service...")
+        start_keep_alive()
         
         # Даем время сервисам запуститься
-        print("⏳ Waiting for services to start...")
-        time.sleep(10)
+        print("⏳ Waiting for services to start (15 seconds)...")
+        time.sleep(15)
         
         # Проверяем, что health server работает
         try:
@@ -1313,38 +1227,14 @@ def main():
         print("💬 Bot is ready to receive messages")
         print("=" * 60)
         
-        # Бесконечный цикл для поддержания активности
-        while True:
-            try:
-                # Запускаем бота
-                application.run_polling(
-                    close_loop=False,
-                    stop_signals=None,  # Игнорируем сигналы остановки
-                    allowed_updates=None
-                )
-            except Exception as e:
-                print(f"🔴 Bot crashed: {e}")
-                print("🔄 Restarting bot in 10 seconds...")
-                time.sleep(10)
-                # Пересоздаем application при перезапуске
-                application = Application.builder().token(BOT_TOKEN).build()
-                # Перезагружаем обработчики
-                application.add_handler(CommandHandler("start", start))
-                application.add_handler(CommandHandler("help", help_command))
-                application.add_handler(CommandHandler("list", list_command))
-                application.add_handler(CommandHandler("pdf", send_processes_pdf))
-                application.add_handler(CommandHandler("guide", send_guide))
-                application.add_handler(CommandHandler("video", send_bpmn_video))
-                application.add_handler(CommandHandler("test", send_test))
-                application.add_handler(CommandHandler("suggestion", suggestion_command))
-                application.add_handler(CommandHandler("viewsuggestions", view_suggestions_command))
-                application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-                application.add_handler(CallbackQueryHandler(button_handler))
+        # ЗАПУСКАЕМ БОТА - это блокирующий вызов
+        application.run_polling()
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
         import traceback
         traceback.print_exc()
-        print("🔄 Attempting auto-restart in 30 seconds...")
-        time.sleep(30)
-        main()  # Рекурсивный перезапуск
+        print("🔄 Bot will exit now")
+
+if __name__ == '__main__':
+    main()
