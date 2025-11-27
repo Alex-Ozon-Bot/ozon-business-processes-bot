@@ -97,14 +97,15 @@ def keep_alive_ping():
     ping_count = 0
     while True:
         try:
-            endpoints = ['/health', '/deep-ping', '/']
+            endpoints = ['/health', '/status', '/']
             endpoint = endpoints[ping_count % len(endpoints)]
             
             response = requests.get(f"http://localhost:{port}{endpoint}", timeout=10)
             if response.status_code == 200:
                 ping_count += 1
                 current_time = datetime.now().strftime('%H:%M:%S')
-                print(f"✅ Keep-alive ping #{ping_count} to {endpoint} at {current_time}")
+                if ping_count % 10 == 0:  # Логируем каждые 10 пингов
+                    print(f"✅ Keep-alive ping #{ping_count} to {endpoint} at {current_time}")
             else:
                 print(f"⚠️ Keep-alive ping failed: {response.status_code}")
         except Exception as e:
@@ -152,23 +153,35 @@ def create_application():
     
     return application
 
-async def notify_admin_about_restart(context, restart_count):
-    """Уведомляет администратора о перезапуске"""
+async def run_bot_single():
+    """Запускает бота один раз с правильной обработкой event loop"""
     try:
-        message = (
-            "🔁 <b>БОТ ПЕРЕЗАПУЩЕН</b>\n\n"
-            f"<b>Перезапуск №:</b> {restart_count}\n"
-            f"<b>Время:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"<b>Статус:</b> Бот снова онлайн и готов к работе"
-        )
+        print("🤖 Starting Telegram bot...")
+        application = create_application()
         
-        await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            text=message,
-            parse_mode='HTML'
-        )
+        # Запускаем бота с правильной обработкой сигналов
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        
+        print("✅ Bot is running and polling...")
+        
+        # Бесконечный цикл для поддержания работы
+        while True:
+            await asyncio.sleep(1)
+            
     except Exception as e:
-        print(f"❌ Не удалось отправить уведомление администратору: {e}")
+        print(f"🔴 Bot error: {e}")
+        raise
+    finally:
+        try:
+            # Корректное завершение
+            if 'application' in locals():
+                await application.updater.stop()
+                await application.stop()
+                await application.shutdown()
+        except Exception as e:
+            print(f"⚠️ Cleanup error: {e}")
 
 def run_bot_with_restart():
     """Запускает бота с механизмом перезапуска"""
@@ -209,17 +222,13 @@ def run_bot_with_restart():
             except Exception as e:
                 print(f"❌ Health server проверка не удалась: {e}")
             
-            # Создаем и запускаем бота
+            # Запускаем бота с asyncio
             print("🤖 Запуск Telegram бота...")
-            application = create_application()
+            asyncio.run(run_bot_single())
             
-            print("✅ Все сервисы запущены успешно!")
-            print("💬 Бот готов к приему сообщений")
-            print("=" * 60)
-            
-            # Запускаем бота (блокирующий вызов)
-            application.run_polling()
-            
+        except KeyboardInterrupt:
+            print("\n🛑 Бот остановлен пользователем")
+            break
         except Exception as e:
             print(f"🔴 КРИТИЧЕСКАЯ ОШИБКА: {e}")
             import traceback

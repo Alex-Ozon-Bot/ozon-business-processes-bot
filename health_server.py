@@ -3,6 +3,7 @@ import time
 from flask import Flask
 import threading
 import requests
+from datetime import datetime  # ← ДОБАВЛЕНО
 
 app = Flask(__name__)
 
@@ -63,7 +64,7 @@ def deep_ping():
         'status': 'DEEP_PING_OK',
         'timestamp': time.time(),
         'message': 'Deep health check completed',
-        'system_time': datetime.now().isoformat()
+        'system_time': datetime.now().isoformat()  # ← ТЕПЕРЬ РАБОТАЕТ
     }
 
 @app.route('/status')
@@ -103,7 +104,7 @@ def run_health_server():
     print(f"🚀 Health server starting on port {port}")
     print(f"📍 Endpoints:")
     print(f"   • http://0.0.0.0:{port}/health")
-    print(f"   • http://0.0.0.0:{port}/status")
+    print(f"   • http://0.0.0.0:{port}/status") 
     print(f"   • http://0.0.0.0:{port}/deep-ping")
     
     # Запускаем фоновые активности
