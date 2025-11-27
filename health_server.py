@@ -55,7 +55,7 @@ def deep_ping():
     
     # Выполняем самопинг для активности
     try:
-        port = int(os.getenv('PORT', 8000))
+        port = int(os.getenv('PORT', 10000))
         requests.get(f"http://localhost:{port}/health", timeout=5)
     except:
         pass

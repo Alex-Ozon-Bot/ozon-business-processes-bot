@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ozon-bot
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python bot.py"
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_CHAT_ID
+        value: "324493714"
+      - key: PORT
+        value: "10000"
