@@ -31,44 +31,57 @@ def get_file_path(filename):
     return os.path.join(current_dir, filename)
 
 def init_database():
-    """Инициализация базы данных"""
+    """Инициализация базы данных с учетом эфемерной файловой системы"""
     try:
-        processes = db.get_all_processes()
-        if not processes:
-            print("📂 База процессов пуста. Заполняем из JSON...")
-            
-            json_path = get_file_path('data/processes.json')
-            if not os.path.exists(json_path):
-                print(f"❌ Файл {json_path} не найден")
-                return
+        # Создаем папку data если её нет
+        os.makedirs('data', exist_ok=True)
+        
+        # Всегда пересоздаем базу из JSON
+        print("📂 Инициализация базы данных из JSON...")
+        
+        json_path = get_file_path('data/processes.json')
+        if not os.path.exists(json_path):
+            print(f"❌ Файл {json_path} не найден")
+            return
 
-            with open(json_path, 'r', encoding='utf-8') as f:
-                processes_data = json.load(f)
+        with open(json_path, 'r', encoding='utf-8') as f:
+            processes_data = json.load(f)
+        
+        conn = sqlite3.connect('data/processes.db')
+        cursor = conn.cursor()
+        
+        # Создаем таблицу если не существует
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS processes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                process_id TEXT UNIQUE NOT NULL,
+                process_name TEXT NOT NULL,
+                description TEXT,
+                keywords TEXT
+            )
+        ''')
+        
+        # Очищаем и заполняем заново
+        cursor.execute('DELETE FROM processes')
+        
+        for process in processes_data:
+            process_id = process.get('process_id', '')
+            process_name = process.get('process_name', '')
+            description = process.get('description', 'Описание отсутствует')
+            keywords = process.get('keywords', '')
             
-            conn = sqlite3.connect('data/processes.db')
-            cursor = conn.cursor()
+            if not description:
+                description = 'Описание отсутствует'
             
-            for process in processes_data:
-                process_id = process.get('process_id', '')
-                process_name = process.get('process_name', '')
-                description = process.get('description', 'Описание отсутствует')
-                keywords = process.get('keywords', '')
-                
-                if not description:
-                    description = 'Описание отсутствует'
-                    print(f"⚠️  Внимание: процесс {process_id} не имеет описания!")
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO processes (process_id, process_name, description, keywords)
-                    VALUES (?, ?, ?, ?)
-                ''', (process_id, process_name, description, keywords))
-            
-            conn.commit()
-            conn.close()
-            print(f"✅ База данных заполнена. Добавлено {len(processes_data)} процессов")
-        else:
-            print(f"📊 В базе данных найдено {len(processes)} процессов")
-            
+            cursor.execute('''
+                INSERT INTO processes (process_id, process_name, description, keywords)
+                VALUES (?, ?, ?, ?)
+            ''', (process_id, process_name, description, keywords))
+        
+        conn.commit()
+        conn.close()
+        print(f"✅ База данных инициализирована. Добавлено {len(processes_data)} процессов")
+        
     except Exception as e:
         print(f"❌ Ошибка при инициализации базы: {e}")
         import traceback
