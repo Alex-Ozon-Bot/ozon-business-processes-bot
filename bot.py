@@ -258,7 +258,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Создаем клавиатуру с кнопками
     keyboard = [
-        [InlineKeyboardButton("🔍 Найти нужный процесс", callback_data="new_search")],
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")],
 	[InlineKeyboardButton("📋 Список всех процессов", callback_data="list_all")],
         [InlineKeyboardButton("📄 Скачать все процессы в PDF", callback_data="get_pdf")],
         [InlineKeyboardButton("📚 Скачать Руководство по чтению процессов в нотации BPMN", callback_data="get_guide")],
@@ -306,7 +306,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🧪 Пройти тест по BPMN", callback_data="take_test")],
         [InlineKeyboardButton("📋 Смотреть список всех процессов", callback_data="list_all")],
         [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
-        [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")]
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -531,7 +531,7 @@ async def send_bpmn_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📚 Скачать Руководство BPMN", callback_data="get_guide")],
         [InlineKeyboardButton("🧪 Пройти тест по BPMN", callback_data="take_test")],
         [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
-        [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")]
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -563,7 +563,7 @@ async def send_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🎥 Обучающий ролик по BPMN", callback_data="bpmn_video")],
         [InlineKeyboardButton("📚 Скачать Руководство BPMN", callback_data="get_guide")],
         [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
-        [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")]
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -660,7 +660,7 @@ async def send_video_callback(query, context):
         [InlineKeyboardButton("📚 Скачать Руководство BPMN", callback_data="get_guide")],
         [InlineKeyboardButton("🧪 Пройти тест по BPMN", callback_data="take_test")],
         [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
-        [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")]
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -692,7 +692,7 @@ async def send_test_callback(query, context):
         [InlineKeyboardButton("🎥 Обучающий ролик по BPMN", callback_data="bpmn_video")],
         [InlineKeyboardButton("📚 Скачать Руководство BPMN", callback_data="get_guide")],
         [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
-        [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")]
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -1182,7 +1182,7 @@ async def list_command_callback(query):
             InlineKeyboardButton("📄 Скачать PDF со всеми процессами", callback_data="get_pdf")
         ])
         keyboard.append([
-            InlineKeyboardButton("🔍 Новый поиск", callback_data="new_search"),
+            InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search"),
             InlineKeyboardButton("💡 Предложить улучшение", callback_data="send_suggestion")
         ])
         keyboard.append([
@@ -1253,7 +1253,7 @@ async def help_callback(query):
         [InlineKeyboardButton("🧪 Пройти тест по BPMN", callback_data="take_test")],
         [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
         [InlineKeyboardButton("📋 Открыть перечень всех процессов", callback_data="list_all")],
-        [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")]
+        [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
