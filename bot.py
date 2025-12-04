@@ -11,6 +11,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from config import BOT_TOKEN, ADMIN_CHAT_ID
 from database import db
+import subprocess
+import sys
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,6 +22,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Глобальная переменная для отслеживания состояния
+bot_restart_count = 0
+MAX_RESTARTS = 10
 
 def get_file_path(filename):
     return os.path.join(current_dir, filename)
@@ -81,6 +87,63 @@ def init_database():
         import traceback
         traceback.print_exc()
 
+def start_health_server():
+    """Запускает health server в отдельном процессе"""
+    try:
+        health_process = subprocess.Popen([
+            sys.executable, 
+            os.path.join(current_dir, 'health_server.py')
+        ])
+        print(f"✅ Health server started (PID: {health_process.pid})")
+        return health_process
+    except Exception as e:
+        print(f"❌ Failed to start health server: {e}")
+        return None
+
+def keep_alive_ping():
+    """Активный keep-alive с разными эндпоинтами"""
+    port = int(os.getenv('PORT', 8000))
+    print(f"🔄 Active keep-alive starting for port {port}")
+    
+    time.sleep(10)
+    
+    ping_count = 0
+    while True:
+        try:
+            endpoints = ['/health', '/status', '/']
+            endpoint = endpoints[ping_count % len(endpoints)]
+            
+            response = requests.get(f"http://localhost:{port}{endpoint}", timeout=10)
+            if response.status_code == 200:
+                ping_count += 1
+                current_time = datetime.now().strftime('%H:%M:%S')
+                if ping_count % 10 == 0:  # Логируем каждые 10 пингов
+                    print(f"✅ Keep-alive ping #{ping_count} to {endpoint} at {current_time}")
+            else:
+                print(f"⚠️ Keep-alive ping failed: {response.status_code}")
+        except Exception as e:
+            print(f"❌ Keep-alive ping error: {e}")
+            
+            # Попытка перезапустить health server
+            try:
+                print("🔄 Attempting to restart health server...")
+                subprocess.Popen([
+                    sys.executable, 
+                    os.path.join(current_dir, 'health_server.py')
+                ])
+                time.sleep(5)
+            except Exception as restart_error:
+                print(f"🚨 Failed to restart health server: {restart_error}")
+        
+        # Случайный интервал от 45 до 75 секунд
+        time.sleep(45 + (ping_count % 30))
+
+def start_keep_alive():
+    """Запускает keep-alive в фоновом потоке"""
+    thread = threading.Thread(target=keep_alive_ping, daemon=True)
+    thread.start()
+    print("🔄 Active keep-alive thread started")
+
 def create_application():
     """Создает и настраивает приложение бота"""
     application = Application.builder().token(BOT_TOKEN).build()
@@ -132,6 +195,62 @@ async def run_bot_single():
                 await application.shutdown()
         except Exception as e:
             print(f"⚠️ Cleanup error: {e}")
+
+def run_bot_with_restart():
+    """Запускает бота с механизмом перезапуска"""
+    global bot_restart_count
+    
+    while bot_restart_count < MAX_RESTARTS:
+        try:
+            bot_restart_count += 1
+            print("=" * 60)
+            print(f"🤖 ЗАПУСК БОТА (Попытка #{bot_restart_count})")
+            print("=" * 60)
+            
+            # Инициализация базы данных
+            init_database()
+            
+            # Запускаем health server
+            health_process = start_health_server()
+            if not health_process:
+                print("❌ Не удалось запустить health server")
+                time.sleep(30)
+                continue
+            
+            # Запускаем keep-alive
+            start_keep_alive()
+            
+            # Даем время сервисам запуститься
+            print("⏳ Ожидание запуска сервисов (15 секунд)...")
+            time.sleep(15)
+            
+            # Проверяем health server
+            try:
+                port = int(os.getenv('PORT', 8000))
+                response = requests.get(f"http://localhost:{port}/health", timeout=10)
+                if response.status_code == 200:
+                    print("✅ Health server работает")
+                else:
+                    print(f"⚠️ Health server ответ: {response.status_code}")
+            except Exception as e:
+                print(f"❌ Health server проверка не удалась: {e}")
+            
+            # Запускаем бота с asyncio
+            print("🤖 Запуск Telegram бота...")
+            asyncio.run(run_bot_single())
+            
+        except KeyboardInterrupt:
+            print("\n🛑 Бот остановлен пользователем")
+            break
+        except Exception as e:
+            print(f"🔴 КРИТИЧЕСКАЯ ОШИБКА: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            print(f"🔄 Перезапуск через 30 секунд... (Попытка {bot_restart_count}/{MAX_RESTARTS})")
+            time.sleep(30)
+    
+    print("🚨 Достигнуто максимальное количество перезапусков. Бот остановлен.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -1182,31 +1301,20 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка проверки: {e}")
 
+def handle_shutdown(signum, frame):
+    """Обработчик сигналов завершения работы"""
+    print(f"🛑 Получен сигнал {signum}. Завершаем работу...")
+    # Даем время на завершение операций
+    asyncio.get_event_loop().stop()
+
 def main():
-    """Основная функция запуска бота"""
+    """Основная функция запуска"""
     try:
-        # Инициализация базы данных
-        init_database()
-        
-        # Запускаем бота
-        print("🤖 Starting Telegram bot...")
-        application = create_application()
-        
-        async def run():
-            await application.initialize()
-            await application.start()
-            await application.updater.start_polling()
-            print("✅ Bot is running and polling...")
-            
-            # Бесконечный цикл
-            while True:
-                await asyncio.sleep(1)
-        
-        # Запускаем
-        asyncio.run(run())
-        
+        run_bot_with_restart()
+    except KeyboardInterrupt:
+        print("\n🛑 Бот остановлен пользователем")
     except Exception as e:
-        print(f"🚨 Критическая ошибка бота: {e}")
+        print(f"🚨 Непредвиденная ошибка: {e}")
         import traceback
         traceback.print_exc()
 
