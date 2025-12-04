@@ -1183,13 +1183,13 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка проверки: {e}")
 
 def main():
-    """Основная функция запуска (теперь бот запускается из app.py)"""
+    """Основная функция запуска бота"""
     try:
         # Инициализация базы данных
         init_database()
         
-        # Запускаем бота напрямую
-        print("🤖 Запуск Telegram бота...")
+        # Запускаем бота
+        print("🤖 Starting Telegram bot...")
         application = create_application()
         
         async def run():
@@ -1197,14 +1197,16 @@ def main():
             await application.start()
             await application.updater.start_polling()
             print("✅ Bot is running and polling...")
+            
+            # Бесконечный цикл
             while True:
                 await asyncio.sleep(1)
         
+        # Запускаем
         asyncio.run(run())
-    except KeyboardInterrupt:
-        print("\n🛑 Бот остановлен пользователем")
+        
     except Exception as e:
-        print(f"🚨 Непредвиденная ошибка: {e}")
+        print(f"🚨 Критическая ошибка бота: {e}")
         import traceback
         traceback.print_exc()
 
