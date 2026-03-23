@@ -466,7 +466,7 @@ async def send_processes_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         # Создаем клавиатуру с кнопками
         keyboard = [
-            [InlineKeyboardButton("📦 Официальная инструкция Ozon (ПВЗ Беларусь)", url="https://univer.ozon.ru/knowledge-base/material/doc/1014414")]
+            [InlineKeyboardButton("📦 Официальная инструкция Ozon (ПВЗ Беларусь)", url="https://univer.ozon.ru/knowledge-base/root/1?node=1")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
